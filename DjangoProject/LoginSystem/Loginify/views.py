@@ -1,6 +1,9 @@
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
+from rest_framework.decorators import api_view
+from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import render, redirect
 from django.contrib.auth import logout
+from .serializers import UserSerializer
 from .models import User
 
 # Create your views here.
@@ -37,3 +40,47 @@ def logout_view(request):
     logout(request)
     return redirect('login')
 
+def get_users(request):
+    email = request.GET.get('email')
+    if email:
+        try:
+            user = User.objects.get(email=email)
+            return JsonResponse({'user': {'username': user.username, 'email': user.email}})
+        except User.DoesNotExist:
+            return JsonResponse({'error': 'User not found'}, status=404)
+    else:
+        users = User.objects.all().values('username', 'email')
+        return JsonResponse({'users': list(users)})
+
+@csrf_exempt
+@api_view(['PATCH'])
+def update_user(request, username=None):
+    if username:
+        try:
+            user = User.objects.get(username=username)
+        except User.DoesNotExist:
+            return JsonResponse({'error': 'User not found'}, status=404)
+    
+        serializer = UserSerializer(user, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return JsonResponse({
+                'message': 'User updated successfully',
+                'user': {
+                    'username': user.username,
+                    'email': user.email
+                }
+            })
+
+@csrf_exempt
+def delete_user(request):
+    username = request.GET.get('username')
+    user = User.objects.get(username=username)
+    user.delete()
+    return JsonResponse({
+        'message': 'User deleted successfully',
+        'user': {
+            'username': user.username,
+            'email': user.email
+        }
+    })
